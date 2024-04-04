@@ -1,0 +1,242 @@
+package bridge
+
+import (
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"github.com/kevinms/leakybucket-go"
+	"github.com/valyala/fasthttp"
+	"net"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+	"tonconnect-bridge/internal/bridge/metrics"
+	"unsafe"
+)
+
+type Store interface {
+	Push(e *Event) bool
+	ExecuteAll(lastEventId uint64, exec func(event *Event) error) error
+}
+
+type IP struct {
+	ActiveConnections int32
+}
+
+type Event struct {
+	ID       uint64
+	Message  []byte
+	Deadline int64
+}
+
+type WebhookData struct {
+	ClientID string `json:"-"`
+	Topic    string `json:"topic"`
+	Hash     []byte `json:"hash"`
+}
+
+type Resp struct {
+	Message    string `json:"message"`
+	StatusCode int    `json:"statusCode"` // ??? backwards compatibility
+}
+
+type Client struct {
+	Store
+	Signal        chan struct{}
+	LastUsed      int64
+	Subscriptions int32
+}
+
+type SSEConfig struct {
+	EnableCORS             bool
+	MaxConnectionsPerIP    int32
+	MaxTTL                 int
+	RateLimitIgnoreToken   string
+	MaxClientsPerSubscribe int
+	MaxPushesPreSec        float64
+	HeartbeatSeconds       int
+	HeartbeatGroups        int
+}
+
+type SSE struct {
+	ips         map[string]*IP
+	pushLimiter *leakybucket.Collector
+	clients     map[string]*Client
+	pingWaiters []unsafe.Pointer
+
+	storageMaker func(id string) Store
+	webhooks     []chan<- WebhookData
+	clientMx     sync.Mutex
+	ipMx         sync.Mutex
+
+	connectionsIter uint64
+	SSEConfig
+}
+
+func NewSSE(storageMaker func(id string) Store, webhooks []chan<- WebhookData, config SSEConfig) *SSE {
+	sse := &SSE{
+		ips:          map[string]*IP{},
+		storageMaker: storageMaker,
+		webhooks:     webhooks,
+		clients:      map[string]*Client{},
+		pushLimiter:  leakybucket.NewCollector(config.MaxPushesPreSec, int64(config.MaxPushesPreSec*10), true),
+		SSEConfig:    config,
+	}
+
+	for i := 0; i < config.HeartbeatGroups; i++ {
+		ch := make(chan struct{})
+		sse.pingWaiters = append(sse.pingWaiters, unsafe.Pointer(&ch))
+	}
+	go sse.pingWorker()
+	go sse.cleanerWorker()
+
+	return sse
+}
+
+func (s *SSE) pingWorker() {
+	// ping all client groups
+	perGroup := (time.Duration(s.HeartbeatSeconds) * time.Second) / time.Duration(s.HeartbeatGroups)
+	for {
+		for i := 0; i < s.HeartbeatGroups; i++ {
+			ch := make(chan struct{})
+			old := (*chan struct{})(atomic.LoadPointer(&s.pingWaiters[i]))
+			atomic.StorePointer(&s.pingWaiters[i], unsafe.Pointer(&ch))
+			close(*old)
+
+			time.Sleep(perGroup)
+		}
+	}
+}
+
+func (s *SSE) cleanerWorker() {
+	for {
+		time.Sleep(5 * time.Second)
+
+		old := time.Now().Unix() - int64(s.MaxTTL)
+
+		s.clientMx.Lock()
+		for k, c := range s.clients {
+			if atomic.LoadInt32(&c.Subscriptions) == 0 && atomic.LoadInt64(&c.LastUsed) < old {
+				delete(s.clients, k)
+			}
+		}
+		s.clientMx.Unlock()
+	}
+}
+
+func (s *SSE) Handle(ctx *fasthttp.RequestCtx) {
+	var authorized bool
+	if s.RateLimitIgnoreToken != "" {
+		if auth := string(ctx.Request.Header.Peek("Authorization")); strings.HasPrefix(auth, "Bearer ") {
+			authorized = auth[7:] == s.RateLimitIgnoreToken
+		}
+	}
+
+	if s.EnableCORS {
+		origin := string(ctx.Request.Header.Peek("Origin"))
+		if origin == "" {
+			origin = "*"
+		}
+
+		ctx.Response.Header.Set("Access-Control-Allow-Origin", origin)
+		ctx.Response.Header.Set("Access-Control-Allow-Credentials", "true")
+	}
+
+	switch {
+	case ctx.IsGet() || ctx.IsPost():
+	case s.EnableCORS && ctx.IsOptions():
+		ctx.Response.Header.Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		ctx.Response.Header.Set("Access-Control-Max-Age", "86400")
+		ctx.Response.Header.Set("Access-Control-Allow-Headers", strings.Join([]string{
+			"DNT", "X-CustomHeader", "Keep-Alive", "User-Agent", "X-Requested-With", "If-Modified-Since", "Cache-Control", "Content-Type", "Authorization", "Origin",
+		}, ","))
+
+		ctx.SetStatusCode(204)
+		return
+	default:
+		respError(ctx, "incorrect request type", 400)
+		return
+	}
+
+	switch string(ctx.Path()) {
+	case "/bridge/events":
+		s.handleSubscribe(ctx, realIP(ctx), authorized)
+	case "/bridge/message":
+		s.handlePush(ctx, realIP(ctx), authorized)
+	default:
+		respError(ctx, "not found", 404)
+	}
+}
+
+func realIP(ctx *fasthttp.RequestCtx) string {
+	// backwards compatibility
+	// TODO: use headers only if behind balancer
+	if ip := string(ctx.Request.Header.Peek("X-Forwarded-For")); ip != "" {
+		i := strings.IndexAny(ip, ",")
+		if i > 0 {
+			return strings.Trim(ip[:i], "[] \t")
+		}
+		return ip
+	}
+	if ip := string(ctx.Request.Header.Peek("X-Real-Ip")); ip != "" {
+		return strings.Trim(ip, "[]")
+	}
+	ra, _, _ := net.SplitHostPort(ctx.RemoteAddr().String())
+	return ra
+}
+
+func (s *SSE) client(shortedId string, subscribed bool) *Client {
+	s.clientMx.Lock()
+	defer s.clientMx.Unlock()
+
+	cli := s.clients[shortedId]
+	if cli == nil {
+		cli = &Client{
+			Store:  s.storageMaker(shortedId),
+			Signal: make(chan struct{}, 1),
+		}
+		s.clients[shortedId] = cli
+	}
+
+	if subscribed {
+		atomic.AddInt32(&cli.Subscriptions, 1)
+	}
+
+	atomic.StoreInt64(&cli.LastUsed, time.Now().Unix())
+	return cli
+}
+
+func respError(ctx *fasthttp.RequestCtx, msg string, code int) {
+	metrics.Global.Requests.WithLabelValues(string(ctx.Path()),
+		fmt.Sprint(code)).Observe(time.Since(ctx.Time()).Seconds())
+
+	data, _ := json.Marshal(Resp{
+		Message:    msg,
+		StatusCode: code,
+	})
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(code)
+	_, _ = ctx.Write(data)
+}
+
+func respOk(ctx *fasthttp.RequestCtx) {
+	metrics.Global.Requests.WithLabelValues(string(ctx.Path()),
+		fmt.Sprint(200)).Observe(time.Since(ctx.Time()).Seconds())
+
+	data, _ := json.Marshal(Resp{
+		Message:    "OK",
+		StatusCode: 200,
+	})
+	ctx.SetContentType("application/json")
+	ctx.SetStatusCode(200)
+	_, _ = ctx.Write(data)
+}
+
+func shortenId(clientId string) (string, error) {
+	hid, err := hex.DecodeString(clientId)
+	if err != nil {
+		return "", err
+	}
+	return string(hid), nil
+}
