@@ -19,15 +19,15 @@ func (s *SSE) handlePush(ctx *fasthttp.RequestCtx, ip string, authorized bool) {
 		return
 	}
 
-	clientId, err := shortenId(string(ctx.QueryArgs().Peek("client_id")))
-	if err != nil {
-		respError(ctx, "clientId is invalid", 400)
+	clientId := string(ctx.QueryArgs().Peek("client_id"))
+	if clientId == "" || len(clientId) > 64 {
+		respError(ctx, "invalid client_id", 400)
 		return
 	}
 
-	to, err := shortenId(string(ctx.QueryArgs().Peek("to")))
-	if err != nil {
-		respError(ctx, "to is invalid", 400)
+	to := string(ctx.QueryArgs().Peek("to"))
+	if to == "" || len(to) > 64 {
+		respError(ctx, "invalid to", 400)
 		return
 	}
 

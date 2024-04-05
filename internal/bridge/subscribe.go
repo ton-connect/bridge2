@@ -72,13 +72,12 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 	var eventCases []reflect.SelectCase
 
 	for _, id := range ids {
-		hid, err := shortenId(id)
-		if err != nil {
-			respError(ctx, "invalid client_id format", 400)
+		if id == "" || len(id) > 64 {
+			respError(ctx, "invalid client_id", 400)
 			return
 		}
 
-		cli := s.client(hid, true)
+		cli := s.client(id, true)
 
 		clients = append(clients, cli)
 		eventCases = append(eventCases, reflect.SelectCase{

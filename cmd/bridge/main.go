@@ -31,7 +31,8 @@ var (
 	hb              = flag.Uint("hb", 10, "Heartbeat every seconds")
 	hbGroups        = flag.Uint("hb-groups", 10, "Heartbeat groups (shards)")
 	pushRPS         = flag.Uint("push-limit", 5, "Push RPS limit")
-	subLimit        = flag.Uint("subscribe-limit", 2, "Parallel subscriptions per IP limit")
+	subLimit        = flag.Uint("subscribe-limit", 100, "Parallel subscriptions per IP limit")
+	subClientsLimit = flag.Uint("max-subscribe-clients", 100, "Clients limit per subscription")
 	limitsSkipToken = flag.String("bypass-token", "", "Limits bypass token")
 	webhook         = flag.String("webhook", "", "Webhook URL")
 	webhookAuth     = flag.String("webhook-auth", "", "Bearer token which will be sent in Authorization header of webhook")
@@ -67,13 +68,17 @@ func main() {
 		webhooks = append(webhooks, bridge.NewWebhook(*webhook, *webhookAuth, 8, 512))
 	}
 
+	if *subClientsLimit > 65000 {
+		panic("too many clients per subscription")
+	}
+
 	sse := bridge.NewSSE(maker, webhooks, bridge.SSEConfig{
 		EnableCORS:             *cors,
 		MaxConnectionsPerIP:    int32(*subLimit),
 		MaxTTL:                 300,
 		RateLimitIgnoreToken:   *limitsSkipToken,
-		MaxClientsPerSubscribe: 7,
-		MaxPushesPreSec:        float64(*pushRPS),
+		MaxClientsPerSubscribe: int(*subClientsLimit),
+		MaxPushesPerSec:        float64(*pushRPS),
 		HeartbeatSeconds:       int(*hb),
 		HeartbeatGroups:        int(*hbGroups),
 	})

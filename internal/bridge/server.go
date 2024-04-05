@@ -1,7 +1,6 @@
 package bridge
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/kevinms/leakybucket-go"
@@ -54,7 +53,7 @@ type SSEConfig struct {
 	MaxTTL                 int
 	RateLimitIgnoreToken   string
 	MaxClientsPerSubscribe int
-	MaxPushesPreSec        float64
+	MaxPushesPerSec        float64
 	HeartbeatSeconds       int
 	HeartbeatGroups        int
 }
@@ -80,7 +79,7 @@ func NewSSE(storageMaker func(id string) Store, webhooks []chan<- WebhookData, c
 		storageMaker: storageMaker,
 		webhooks:     webhooks,
 		clients:      map[string]*Client{},
-		pushLimiter:  leakybucket.NewCollector(config.MaxPushesPreSec, int64(config.MaxPushesPreSec*10), true),
+		pushLimiter:  leakybucket.NewCollector(config.MaxPushesPerSec, int64(config.MaxPushesPerSec*10), true),
 		SSEConfig:    config,
 	}
 
@@ -231,12 +230,4 @@ func respOk(ctx *fasthttp.RequestCtx) {
 	ctx.SetContentType("application/json")
 	ctx.SetStatusCode(200)
 	_, _ = ctx.Write(data)
-}
-
-func shortenId(clientId string) (string, error) {
-	hid, err := hex.DecodeString(clientId)
-	if err != nil {
-		return "", err
-	}
-	return string(hid), nil
 }

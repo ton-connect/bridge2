@@ -156,8 +156,8 @@ func TestBridge(t *testing.T) {
 		MaxConnectionsPerIP:    10,
 		MaxTTL:                 300,
 		RateLimitIgnoreToken:   "123",
-		MaxClientsPerSubscribe: 7,
-		MaxPushesPreSec:        5,
+		MaxClientsPerSubscribe: 100,
+		MaxPushesPerSec:        5,
 		HeartbeatSeconds:       5,
 		HeartbeatGroups:        10,
 	})

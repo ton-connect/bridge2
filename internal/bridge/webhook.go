@@ -20,13 +20,13 @@ func NewWebhook(url, auth string, workers, queueSize int) chan<- WebhookData {
 			for data := range ch {
 				postBody, err := json.Marshal(data)
 				if err != nil {
-					log.Warn().Str("url", url).Hex("client_id", []byte(data.ClientID)).Msg("failed to marshal webhook body")
+					log.Warn().Str("url", url).Str("client_id", data.ClientID).Msg("failed to marshal webhook body")
 					continue
 				}
 
 				req, err := http.NewRequest(http.MethodPost, url+"/"+hex.EncodeToString([]byte(data.ClientID)), bytes.NewReader(postBody))
 				if err != nil {
-					log.Warn().Str("url", url).Hex("client_id", []byte(data.ClientID)).Msg("failed to build webhook request")
+					log.Warn().Str("url", url).Str("client_id", data.ClientID).Msg("failed to build webhook request")
 					continue
 				}
 
@@ -36,16 +36,16 @@ func NewWebhook(url, auth string, workers, queueSize int) chan<- WebhookData {
 				req.Header.Set("Content-Type", "application/json")
 				res, err := cli.Do(req)
 				if err != nil {
-					log.Warn().Str("url", url).Hex("client_id", []byte(data.ClientID)).Msg("failed to send webhook")
+					log.Warn().Str("url", url).Str("client_id", data.ClientID).Msg("failed to send webhook")
 					continue
 				}
 				_ = res.Body.Close()
 
 				if res.StatusCode != http.StatusOK {
-					log.Warn().Str("url", url).Hex("client_id", []byte(data.ClientID)).Int("status", res.StatusCode).Msg("bad response status from webhook")
+					log.Warn().Str("url", url).Str("client_id", data.ClientID).Int("status", res.StatusCode).Msg("bad response status from webhook")
 					continue
 				}
-				log.Debug().Str("url", url).Hex("client_id", []byte(data.ClientID)).Int("status", res.StatusCode).Msg("webhook sent")
+				log.Debug().Str("url", url).Str("client_id", data.ClientID).Int("status", res.StatusCode).Msg("webhook sent")
 			}
 		}()
 	}
