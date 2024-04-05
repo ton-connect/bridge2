@@ -61,6 +61,7 @@ func (s *SSE) handlePush(ctx *fasthttp.RequestCtx, ip string, authorized bool) {
 	tm := time.Now()
 	added := cli.Push(&Event{
 		ID:       uint64(tm.UnixNano()),
+		From:     clientId,
 		Message:  decoded,
 		Deadline: tm.Unix() + int64(ttl),
 	})

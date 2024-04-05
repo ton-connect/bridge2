@@ -1,7 +1,7 @@
 package bridge
 
 import (
-	"encoding/base64"
+	"encoding/json"
 	"github.com/rs/zerolog/log"
 	"github.com/valyala/fasthttp"
 	"net"
@@ -35,7 +35,7 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 
 		if u.ActiveConnections+1 > s.MaxConnectionsPerIP {
 			s.ipMx.Unlock()
-			respError(ctx, "too many subscriptions from your network", 403)
+			respError(ctx, "too many subscriptions from your network", 429)
 			return
 		}
 		u.ActiveConnections++
@@ -119,11 +119,6 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 			return
 		}
 
-		if err := sendEvent(conn, []byte("\n")); err != nil {
-			// stop listen
-			return
-		}
-
 		pingShard := atomic.AddUint64(&s.connectionsIter, 1) % uint64(s.HeartbeatGroups)
 		var lastMessageAt int64
 		for {
@@ -153,9 +148,11 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 			delivered := 0
 			err = clients[idx].ExecuteAll(lastEventId, func(e *Event) error {
 				delivered++
+
+				data, _ := json.Marshal(e) // not return an error to not break client
 				return sendEvent(conn, []byte("event: message"+
 					"\r\nid: "+strconv.FormatUint(e.ID, 10)+
-					"\r\ndata: "+base64.StdEncoding.EncodeToString(e.Message)+"\r\n\r\n"))
+					"\r\ndata: "+string(data)+"\r\n\r\n"))
 			})
 			if err != nil {
 				return // stop listen

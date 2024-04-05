@@ -24,9 +24,11 @@ type IP struct {
 }
 
 type Event struct {
-	ID       uint64
-	Message  []byte
-	Deadline int64
+	ID       uint64 `json:"-"`
+	Deadline int64  `json:"-"`
+
+	From    string `json:"from"`
+	Message []byte `json:"message"`
 }
 
 type WebhookData struct {
