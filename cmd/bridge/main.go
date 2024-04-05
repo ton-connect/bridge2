@@ -99,7 +99,7 @@ func main() {
 		NoDefaultServerHeader: true,
 		NoDefaultDate:         true,
 		WriteBufferSize:       1024,
-		ReadBufferSize:        1024,
+		ReadBufferSize:        1024 + int(*subClientsLimit)*65, // because many client_ids can be passed
 	}
 
 	if *tls {

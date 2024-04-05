@@ -286,7 +286,7 @@ func TestBridge(t *testing.T) {
 		NoDefaultServerHeader: true,
 		NoDefaultDate:         true,
 		WriteBufferSize:       1024,
-		ReadBufferSize:        1024,
+		ReadBufferSize:        32768,
 	}
 	if err := srv.Serve(ls); err != nil {
 		panic(err.Error())
