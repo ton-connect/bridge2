@@ -51,10 +51,12 @@ func (s *SSE) handlePush(ctx *fasthttp.RequestCtx, ip string, authorized bool) {
 
 	// decode to validate and decrease size
 	decoded := make([]byte, decodedLen)
-	if _, err = base64.StdEncoding.Decode(decoded, body); err != nil {
+	decLen, err := base64.StdEncoding.Decode(decoded, body)
+	if err != nil {
 		respError(ctx, "invalid payload", 400)
 		return
 	}
+	decoded = decoded[:decLen]
 
 	cli := s.client(to, false)
 
