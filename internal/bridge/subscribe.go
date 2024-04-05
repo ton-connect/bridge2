@@ -86,11 +86,6 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 		})
 	}
 
-	ctx.Response.Header.Set("Content-Type", "text/event-stream")
-	ctx.Response.Header.Set("Cache-Control", "no-cache")
-	ctx.Response.Header.Set("Connection", "keep-alive")
-	ctx.Response.Header.Add("Transfer-Encoding", "chunked")
-
 	// hijack connection for resource efficient manual control
 	ctx.HijackSetNoResponse(true)
 	ctx.Hijack(func(conn net.Conn) {
