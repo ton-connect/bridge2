@@ -29,6 +29,7 @@ var (
 	cors            = flag.Bool("cors", false, "Enable CORS")
 	jsonLogs        = flag.Bool("json-logs", false, "JSON logs output")
 	hb              = flag.Uint("hb", 10, "Heartbeat every seconds")
+	ttl             = flag.Uint("ttl", 300, "Max message ttl")
 	hbGroups        = flag.Uint("hb-groups", 10, "Heartbeat groups (shards)")
 	pushRPS         = flag.Uint("push-limit", 5, "Push RPS limit")
 	subLimit        = flag.Uint("subscribe-limit", 100, "Parallel subscriptions per IP limit")
@@ -75,7 +76,7 @@ func main() {
 	sse := bridge.NewSSE(maker, webhooks, bridge.SSEConfig{
 		EnableCORS:             *cors,
 		MaxConnectionsPerIP:    int32(*subLimit),
-		MaxTTL:                 300,
+		MaxTTL:                 int(*ttl),
 		RateLimitIgnoreToken:   *limitsSkipToken,
 		MaxClientsPerSubscribe: int(*subClientsLimit),
 		MaxPushesPerSec:        float64(*pushRPS),
