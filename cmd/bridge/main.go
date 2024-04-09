@@ -1,16 +1,17 @@
 package main
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"flag"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+	"github.com/sethvargo/go-envconfig"
 	"github.com/valyala/fasthttp"
 	"io"
 	"math/big"
@@ -21,34 +22,37 @@ import (
 	"tonconnect-bridge/internal/store"
 )
 
-var (
-	verbosity       = flag.Int("v", 2, "3 = debug, 2 = info, 1 = warn, 0 = error")
-	addr            = flag.String("addr", ":8080", "TCP address to listen to")
-	metricsAddr     = flag.String("metrics-addr", ":8081", "Metrics TCP address to listen to")
-	tls             = flag.Bool("tls", false, "Enable self signed tls")
-	cors            = flag.Bool("cors", false, "Enable CORS")
-	jsonLogs        = flag.Bool("json-logs", false, "JSON logs output")
-	hb              = flag.Uint("hb", 10, "Heartbeat every seconds")
-	ttl             = flag.Uint("ttl", 300, "Max message ttl")
-	hbGroups        = flag.Uint("hb-groups", 10, "Heartbeat groups (shards)")
-	pushRPS         = flag.Uint("push-limit", 5, "Push RPS limit")
-	subLimit        = flag.Uint("subscribe-limit", 100, "Parallel subscriptions per IP limit")
-	subClientsLimit = flag.Uint("max-subscribe-clients", 100, "Clients limit per subscription")
-	limitsSkipToken = flag.String("bypass-token", "", "Limits bypass token")
-	webhook         = flag.String("webhook", "", "Webhook URL")
-	webhookAuth     = flag.String("webhook-auth", "", "Bearer token which will be sent in Authorization header of webhook")
-)
+type Config struct {
+	Verbosity                 int    `env:"VERBOSITY, default=2"`                      // 3 = debug, 2 = info, 1 = warn, 0 = error
+	Addr                      string `env:"LISTEN_ADDR, default=:8080"`                // TCP address to listen to
+	MetricsAddr               string `env:"METRICS_ADDR, default=:8081"`               // Metrics TCP address to listen to
+	TLS                       bool   `env:"TLS, default=false"`                        // Enable self signed tls
+	CORS                      bool   `env:"CORS, default=false"`                       // Enable CORS
+	JsonLogs                  bool   `env:"JSON_LOGS, default=false"`                  // Enable JSON logs output
+	HeartbeatSeconds          uint   `env:"HEARTBEAT_SECONDS, default=10"`             // Heartbeat every seconds
+	MaxMessageTTL             uint   `env:"MAX_MESSAGE_TTL, default=300"`              // "Max message ttl
+	HeartbeatGroups           uint   `env:"HEARTBEAT_GROUPS, default=10"`              // Heartbeat groups (shards)
+	PushRPS                   uint   `env:"PUSH_RPS_LIMIT, default=5"`                 // Push RPS limit
+	MaxSubscribersPerIP       uint   `env:"MAX_SUBSCRIBERS_PER_IP, default=100"`       // Parallel subscriptions per IP limit
+	MaxClientsPerSubscription uint   `env:"MAX_CLIENTS_PER_SUBSCRIPTION, default=100"` // Clients limit per subscription
+	BypassToken               string `env:"LIMITS_BYPASS_TOKEN"`
+	WebhookURL                string `env:"WEBHOOK_URL"`
+	WebhookAuth               string `env:"WEBHOOK_AUTH"` // Bearer token which will be sent in Authorization header of webhook
+}
 
 func main() {
-	flag.Parse()
+	var cfg Config
+	if err := envconfig.Process(context.Background(), &cfg); err != nil {
+		panic("failed to process env: " + err.Error())
+	}
 
 	var logWr io.Writer = zerolog.NewConsoleWriter()
-	if *jsonLogs {
+	if cfg.JsonLogs {
 		logWr = os.Stderr
 	}
 	log.Logger = zerolog.New(logWr).With().Timestamp().Logger().Level(zerolog.InfoLevel)
 
-	switch *verbosity {
+	switch cfg.Verbosity {
 	case 3:
 		log.Logger = log.Logger.Level(zerolog.DebugLevel).With().Logger()
 	case 2:
@@ -65,28 +69,28 @@ func main() {
 	}
 
 	var webhooks []chan<- bridge.WebhookData
-	if *webhook != "" {
-		webhooks = append(webhooks, bridge.NewWebhook(*webhook, *webhookAuth, 8, 512))
+	if cfg.WebhookURL != "" {
+		webhooks = append(webhooks, bridge.NewWebhook(cfg.WebhookURL, cfg.WebhookAuth, 8, 512))
 	}
 
-	if *subClientsLimit > 65000 {
+	if cfg.MaxClientsPerSubscription > 65000 {
 		panic("too many clients per subscription")
 	}
 
 	sse := bridge.NewSSE(maker, webhooks, bridge.SSEConfig{
-		EnableCORS:             *cors,
-		MaxConnectionsPerIP:    int32(*subLimit),
-		MaxTTL:                 int(*ttl),
-		RateLimitIgnoreToken:   *limitsSkipToken,
-		MaxClientsPerSubscribe: int(*subClientsLimit),
-		MaxPushesPerSec:        float64(*pushRPS),
-		HeartbeatSeconds:       int(*hb),
-		HeartbeatGroups:        int(*hbGroups),
+		EnableCORS:             cfg.CORS,
+		MaxConnectionsPerIP:    int32(cfg.MaxSubscribersPerIP),
+		MaxTTL:                 int(cfg.MaxMessageTTL),
+		RateLimitIgnoreToken:   cfg.BypassToken,
+		MaxClientsPerSubscribe: int(cfg.MaxClientsPerSubscription),
+		MaxPushesPerSec:        float64(cfg.PushRPS),
+		HeartbeatSeconds:       int(cfg.HeartbeatSeconds),
+		HeartbeatGroups:        int(cfg.HeartbeatGroups),
 	})
 
 	go func() {
 		http.Handle("/metrics", promhttp.Handler())
-		if err := http.ListenAndServe(*metricsAddr, nil); err != nil {
+		if err := http.ListenAndServe(cfg.MetricsAddr, nil); err != nil {
 			log.Fatal().Err(err).Msg("listen metrics failed")
 		}
 	}()
@@ -99,23 +103,23 @@ func main() {
 		NoDefaultServerHeader: true,
 		NoDefaultDate:         true,
 		WriteBufferSize:       1024,
-		ReadBufferSize:        2048 + int(*subClientsLimit)*65, // because many client_ids can be passed
-		ReduceMemoryUsage:     true,                            // to clean up read buffers and not hold them
+		ReadBufferSize:        2048 + int(cfg.MaxClientsPerSubscription)*65, // because many client_ids can be passed
+		ReduceMemoryUsage:     true,                                         // to clean up read buffers and not hold them
 	}
 
-	if *tls {
+	if cfg.TLS {
 		cert, key, err := generateSelfSignedCertificate()
 		if err != nil {
 			log.Fatal().Err(err).Msg("failed generateSelfSignedCertificate")
 		}
 
-		if err = srv.ListenAndServeTLSEmbed(*addr, cert, key); err != nil {
+		if err = srv.ListenAndServeTLSEmbed(cfg.Addr, cert, key); err != nil {
 			log.Fatal().Err(err).Msg("failed ListenAndServeTLSEmbed")
 		}
 		return
 	}
 
-	if err := srv.ListenAndServe(*addr); err != nil {
+	if err := srv.ListenAndServe(cfg.Addr); err != nil {
 		log.Fatal().Err(err).Msg("failed ListenAndServe")
 	}
 }
