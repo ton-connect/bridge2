@@ -2,14 +2,15 @@ package bridge
 
 import (
 	"encoding/json"
-	"github.com/rs/zerolog/log"
-	"github.com/valyala/fasthttp"
 	"net"
 	"reflect"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/rs/zerolog/log"
+	"github.com/valyala/fasthttp"
 	"tonconnect-bridge/internal/bridge/metrics"
 )
 

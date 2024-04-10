@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/rs/zerolog/log"
 	"net/http"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 func NewWebhook(url, auth string, workers, queueSize int) chan<- WebhookData {

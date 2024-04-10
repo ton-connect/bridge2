@@ -6,9 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
-	"github.com/valyala/fasthttp"
 	"io"
 	"math/rand"
 	"net"
@@ -16,6 +13,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+	"github.com/valyala/fasthttp"
 	"tonconnect-bridge/internal/bridge"
 	"tonconnect-bridge/internal/store"
 )
