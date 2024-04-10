@@ -3,15 +3,16 @@ package bridge
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/kevinms/leakybucket-go"
-	"github.com/valyala/fasthttp"
 	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-	"tonconnect-bridge/internal/bridge/metrics"
 	"unsafe"
+
+	"github.com/kevinms/leakybucket-go"
+	"github.com/valyala/fasthttp"
+	"tonconnect-bridge/internal/bridge/metrics"
 )
 
 type Store interface {

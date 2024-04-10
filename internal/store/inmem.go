@@ -1,9 +1,10 @@
 package store
 
 import (
-	"github.com/rs/zerolog/log"
 	"sync"
 	"time"
+
+	"github.com/rs/zerolog/log"
 	"tonconnect-bridge/internal/bridge"
 )
 

@@ -2,9 +2,10 @@ package bridge
 
 import (
 	"encoding/base64"
+	"time"
+
 	"github.com/rs/zerolog/log"
 	"github.com/valyala/fasthttp"
-	"time"
 	"tonconnect-bridge/internal/bridge/metrics"
 )
 
