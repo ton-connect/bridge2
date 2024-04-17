@@ -156,7 +156,7 @@ func TestBridge(t *testing.T) {
 	sse := bridge.NewSSE(maker, whs, bridge.SSEConfig{
 		MaxConnectionsPerIP:    10,
 		MaxTTL:                 300,
-		RateLimitIgnoreToken:   "123",
+		RateLimitIgnoreTokens:  []string{"123"},
 		MaxClientsPerSubscribe: 100,
 		MaxPushesPerSec:        5,
 		HeartbeatSeconds:       5,
