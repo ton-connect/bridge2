@@ -36,7 +36,6 @@ type Config struct {
 	PushRPS                   uint   `env:"PUSH_RPS_LIMIT, default=5"`                 // Push RPS limit
 	MaxSubscribersPerIP       uint   `env:"MAX_SUBSCRIBERS_PER_IP, default=100"`       // Parallel subscriptions per IP limit
 	MaxClientsPerSubscription uint   `env:"MAX_CLIENTS_PER_SUBSCRIPTION, default=100"` // Clients limit per subscription
-	BypassToken               string `env:"LIMITS_BYPASS_TOKEN"`
 	WebhookURL                string `env:"WEBHOOK_URL"`
 	WebhookAuth               string `env:"WEBHOOK_AUTH"` // Bearer token which will be sent in Authorization header of webhook
 }
@@ -82,7 +81,6 @@ func main() {
 		EnableCORS:             cfg.CORS,
 		MaxConnectionsPerIP:    int32(cfg.MaxSubscribersPerIP),
 		MaxTTL:                 int(cfg.MaxMessageTTL),
-		RateLimitIgnoreToken:   cfg.BypassToken,
 		MaxClientsPerSubscribe: int(cfg.MaxClientsPerSubscription),
 		MaxPushesPerSec:        float64(cfg.PushRPS),
 		HeartbeatSeconds:       int(cfg.HeartbeatSeconds),

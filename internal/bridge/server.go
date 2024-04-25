@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -11,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/kevinms/leakybucket-go"
+	"github.com/rs/zerolog/log"
 	"github.com/valyala/fasthttp"
 	"tonconnect-bridge/internal/bridge/metrics"
 )
@@ -54,7 +57,7 @@ type SSEConfig struct {
 	EnableCORS             bool
 	MaxConnectionsPerIP    int32
 	MaxTTL                 int
-	RateLimitIgnoreToken   string
+	RateLimitIgnoreTokens  []string
 	MaxClientsPerSubscribe int
 	MaxPushesPerSec        float64
 	HeartbeatSeconds       int
@@ -92,6 +95,7 @@ func NewSSE(storageMaker func(id string) Store, webhooks []chan<- WebhookData, c
 	}
 	go sse.pingWorker()
 	go sse.cleanerWorker()
+	go sse.refreshUnlimitedTokens()
 
 	return sse
 }
@@ -127,12 +131,36 @@ func (s *SSE) cleanerWorker() {
 	}
 }
 
+func (s *SSE) refreshUnlimitedTokens() {
+	type UnlimitedTokens struct {
+		Tokens []string `json:"tokens"`
+	}
+	refresh := func() []string {
+		file, err := os.ReadFile("unlimited_tokens.json")
+		if err != nil {
+			log.Printf("failed to read unlimited tokens file: %v", err)
+			return []string{}
+		}
+		var tokens UnlimitedTokens
+		if err = json.Unmarshal(file, &tokens); err != nil {
+			log.Printf("failed to convert unlimited tokens: %v", err)
+			return []string{}
+		}
+		return tokens.Tokens
+	}
+	for {
+		tokens := refresh()
+		if len(tokens) != 0 {
+			s.RateLimitIgnoreTokens = tokens
+		}
+		time.Sleep(time.Minute * 5)
+	}
+}
+
 func (s *SSE) Handle(ctx *fasthttp.RequestCtx) {
 	var authorized bool
-	if s.RateLimitIgnoreToken != "" {
-		if auth := string(ctx.Request.Header.Peek("Authorization")); strings.HasPrefix(auth, "Bearer ") {
-			authorized = auth[7:] == s.RateLimitIgnoreToken
-		}
+	if auth := string(ctx.Request.Header.Peek("Authorization")); strings.HasPrefix(auth, "Bearer ") {
+		authorized = slices.Contains(s.RateLimitIgnoreTokens, auth[7:])
 	}
 
 	if s.EnableCORS {

@@ -78,12 +78,6 @@ This document outlines the environment variables used in the application along w
 - **Environment Variable**: `MAX_CLIENTS_PER_SUBSCRIPTION`
 - **Default Value**: `100`
 
-### BypassToken
-- **Description**: Token to bypass limits.
-- **Type**: String
-- **Environment Variable**: `LIMITS_BYPASS_TOKEN`
-- **Default Value**: Not set
-
 ### WebhookURL
 - **Description**: URL for webhook.
 - **Type**: String
@@ -95,3 +89,11 @@ This document outlines the environment variables used in the application along w
 - **Type**: String
 - **Environment Variable**: `WEBHOOK_AUTH`
 - **Default Value**: Not set
+
+### Unlimited Tokens
+- **Description**: You can set tokens to be unlimited. To do this, you need to fill out the file [unlimited_tokens.json](unlimited_tokens.json) in the format:
+```
+{
+  "tokens": ["first_token", "second_token"]
+}
+```
