@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/rs/zerolog/log"
+	"tonconnect-bridge/internal/bridge/metrics"
 )
 
 func NewWebhook(url, auth string, workers, queueSize int) chan<- WebhookData {
@@ -21,12 +22,14 @@ func NewWebhook(url, auth string, workers, queueSize int) chan<- WebhookData {
 			for data := range ch {
 				postBody, err := json.Marshal(data)
 				if err != nil {
+					metrics.Global.FailedWebhookMessages.Inc()
 					log.Warn().Str("url", url).Str("client_id", data.ClientID).Msg("failed to marshal webhook body")
 					continue
 				}
 
 				req, err := http.NewRequest(http.MethodPost, url+"/"+hex.EncodeToString([]byte(data.ClientID)), bytes.NewReader(postBody))
 				if err != nil {
+					metrics.Global.FailedWebhookMessages.Inc()
 					log.Warn().Str("url", url).Str("client_id", data.ClientID).Msg("failed to build webhook request")
 					continue
 				}
@@ -37,15 +40,18 @@ func NewWebhook(url, auth string, workers, queueSize int) chan<- WebhookData {
 				req.Header.Set("Content-Type", "application/json")
 				res, err := cli.Do(req)
 				if err != nil {
+					metrics.Global.FailedWebhookMessages.Inc()
 					log.Warn().Str("url", url).Str("client_id", data.ClientID).Msg("failed to send webhook")
 					continue
 				}
 				_ = res.Body.Close()
 
 				if res.StatusCode != http.StatusOK {
+					metrics.Global.FailedWebhookMessages.Inc()
 					log.Warn().Str("url", url).Str("client_id", data.ClientID).Int("status", res.StatusCode).Msg("bad response status from webhook")
 					continue
 				}
+				metrics.Global.DeliveredWebhookMessages.Inc()
 				log.Debug().Str("url", url).Str("client_id", data.ClientID).Int("status", res.StatusCode).Msg("webhook sent")
 			}
 		}()

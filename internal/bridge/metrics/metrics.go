@@ -6,10 +6,12 @@ import (
 )
 
 type Metrics struct {
-	ActiveSubscriptions prometheus.Gauge
-	Requests            *prometheus.HistogramVec
-	DeliveredMessages   prometheus.Counter
-	PushedMessages      prometheus.Counter
+	ActiveSubscriptions      prometheus.Gauge
+	Requests                 *prometheus.HistogramVec
+	DeliveredMessages        prometheus.Counter
+	PushedMessages           prometheus.Counter
+	DeliveredWebhookMessages prometheus.Counter
+	FailedWebhookMessages    prometheus.Counter
 }
 
 var Global Metrics
@@ -39,6 +41,18 @@ func init() {
 			Subsystem: "bridge",
 			Name:      "pushed_messages",
 			Help:      "Pushed messages",
+		}),
+		DeliveredWebhookMessages: promauto.NewCounter(prometheus.CounterOpts{
+			Namespace: "tonconnect",
+			Subsystem: "bridge",
+			Name:      "delivered_webhook_messages",
+			Help:      "Delivered webhook messages",
+		}),
+		FailedWebhookMessages: promauto.NewCounter(prometheus.CounterOpts{
+			Namespace: "tonconnect",
+			Subsystem: "bridge",
+			Name:      "failed_webhook_messages",
+			Help:      "Failed webhook messages",
 		}),
 	}
 }
