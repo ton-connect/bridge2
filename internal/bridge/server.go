@@ -185,7 +185,7 @@ func (s *SSE) Handle(ctx *fasthttp.RequestCtx) {
 		ctx.SetStatusCode(204)
 		return
 	default:
-		respError(ctx, "incorrect request type", 400)
+		respErrorNoMetric(ctx, "incorrect request type", 400)
 		return
 	}
 
@@ -195,7 +195,7 @@ func (s *SSE) Handle(ctx *fasthttp.RequestCtx) {
 	case "/bridge/message":
 		s.handlePush(ctx, realIP(ctx), authorized)
 	default:
-		respError(ctx, "not found", 404)
+		respErrorNoMetric(ctx, "not found", 404)
 	}
 }
 
@@ -241,6 +241,10 @@ func respError(ctx *fasthttp.RequestCtx, msg string, code int) {
 	metrics.Global.Requests.WithLabelValues(string(ctx.Path()),
 		fmt.Sprint(code)).Observe(time.Since(ctx.Time()).Seconds())
 
+	respErrorNoMetric(ctx, msg, code)
+}
+
+func respErrorNoMetric(ctx *fasthttp.RequestCtx, msg string, code int) {
 	data, _ := json.Marshal(Resp{
 		Message:    msg,
 		StatusCode: code,
