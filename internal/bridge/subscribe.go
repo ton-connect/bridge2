@@ -93,6 +93,10 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 		metrics.Global.ActiveSubscriptions.Inc()
 		log.Debug().Strs("clients", ids).Msg("subscribed")
 		defer func() {
+			for _, cli := range clients {
+				atomic.AddInt32(&cli.Subscriptions, -1)
+			}
+
 			if onFinish != nil {
 				onFinish()
 			}
