@@ -14,7 +14,7 @@ import (
 	"tonconnect-bridge/internal/bridge/metrics"
 )
 
-var heartbeat = []byte("event: heartbeat\r\n\r\n")
+var heartbeat = []byte("event: message\r\ndata: heartbeat\r\n\n")
 
 func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bool) {
 	idsStr := string(ctx.QueryArgs().Peek("client_id"))
