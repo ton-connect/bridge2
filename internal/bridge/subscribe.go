@@ -14,6 +14,11 @@ import (
 	"tonconnect-bridge/internal/bridge/metrics"
 )
 
+var validHeartbeatTypes = map[string][]byte{
+	"legacy":  []byte("event: heartbeat\n\n"),
+	"message": []byte("event: message\ndata: heartbeat\n\n"),
+}
+
 func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bool) {
 	idsStr := string(ctx.QueryArgs().Peek("client_id"))
 	if len(idsStr) == 0 {
@@ -49,6 +54,17 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 			}
 			s.ipMx.Unlock()
 		}
+	}
+
+	heartbeatType := "legacy"
+	if heartbeatParam := ctx.QueryArgs().Peek("heartbeat"); heartbeatParam != nil {
+		heartbeatType = string(heartbeatParam)
+	}
+
+	heartbeatMsg, ok := validHeartbeatTypes[heartbeatType]
+	if !ok {
+		respError(ctx, "invalid heartbeat type. Supported: legacy and message", 400)
+		return
 	}
 
 	var err error
@@ -133,7 +149,7 @@ func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bo
 					continue
 				}
 
-				if err := sendEvent(conn, heartbeat); err != nil {
+				if err := sendEvent(conn, heartbeatMsg); err != nil {
 					// stop listen
 					return
 				}
