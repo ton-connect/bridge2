@@ -16,7 +16,7 @@ import (
 
 var validHeartbeatTypes = map[string][]byte{
 	"legacy":  []byte("event: heartbeat\n\n"),
-	"message": []byte("event: message\ndata: heartbeat\n\n"),
+	"message": []byte("event: message\r\ndata: heartbeat\r\n\n"),
 }
 
 func (s *SSE) handleSubscribe(ctx *fasthttp.RequestCtx, ip string, authorized bool) {
