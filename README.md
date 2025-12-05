@@ -1,3 +1,20 @@
+# TON Connect Bridge v2
+
+> ⚠️ **DEPRECATED**
+>
+> This repository is no longer maintained. Please use [ton-connect/bridge](https://github.com/ton-connect/bridge) instead.
+>
+> **What should I do?**
+> Migrate to [ton-connect/bridge](https://github.com/ton-connect/bridge) — the actively maintained implementation with improved performance, clustering support, and regular updates.
+>
+> **Why?**
+> We're consolidating TON Connect bridge implementations into a single repository to provide better support and faster development.
+>
+> **Questions?**
+> Open an issue at [ton-connect/bridge](https://github.com/ton-connect/bridge/issues).
+
+---
+
 ## Environment Variables Reference
 
 This document outlines the environment variables used in the application along with their default values and descriptions.
